@@ -1,4 +1,5 @@
-Cranky's Data Virus
+NASM virus
+fork from Cranky's Data Virus
 ========================================
 (for educational purpose only!)
 

