@@ -112,7 +112,7 @@ scan_file:
     mov eax, 3      ; sys_read
     mov ecx, edi    
     add ecx, 2080   ; read to edi+2080(elf_targets' content space)
-    mov edx, 12     ; read 12 bytes, 0-3 bytes to check for the ELF header, 9-12 bytes to find signature
+    mov edx, 16     ; read 16 bytes, 0-3 bytes to check for the ELF header, 9-16 bytes to find signature
     int 80h
 
 check_elf:
