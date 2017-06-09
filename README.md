@@ -18,6 +18,5 @@ This virus only infects ELF executables in the same directory
 To assemble:
 -----------
 ```
-> nasm -f elf -F dwarf -g cranky_data_virus.asm
-> ld -m elf_i386 -e v_start -o cranky_data_virus cranky_data_virus.o
+> make all
 ```
